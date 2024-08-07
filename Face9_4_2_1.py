@@ -14,14 +14,13 @@ import threading
 
 # Initialize dlib's face detector (HOG-based) and create the facial landmark predictor
 detector = dlib.get_frontal_face_detector()
-predictor_path = os.path.expanduser("~/kape_venv/lib64/python3.11/site-packages/face_recognition_models/models/shape_predictor_68_face_landmarks.dat")
-predictor = dlib.shape_predictor(predictor_path)
+predictor = dlib.shape_predictor("C:/Users/lenovo/AppData/Roaming/Python/Python310/site-packages/face_recognition_models/models/shape_predictor_68_face_landmarks.dat") # Ensure this file is in your directory
 
 # Get the base directory
 base_dir = os.path.dirname(os.path.abspath(__file__))
 
 # Use the base directory to create a relative path for the Firebase credentials
-cred_path = os.path.join(base_dir, "sistempresensiditkape-firebase-adminsdk-nepdc-1f2e74a2d4.json")
+cred_path = os.path.join(base_dir, "D:/vscode/KAPE2/sistempresensidit-firebase-adminsdk-okqli-e67a29dc70.json")
 cred = credentials.Certificate(cred_path)
 firebase_admin.initialize_app(cred, {
     'databaseURL': 'https://sistempresensidit-default-rtdb.asia-southeast1.firebasedatabase.app/'
@@ -58,6 +57,7 @@ def load_data_wajah():
                 data_wajah[nip] = value
     return data_wajah
 
+
 def register_wajah_baru(nama, nip, encoding_wajah):
     info_data_wajah[nip] = {
         'nip': nip,
@@ -89,7 +89,7 @@ register_wajah = False
 
 def prompt_user_input():
     root = tk.Tk()
-    root.withdraw()
+    root.withdraw()  
 
     nama = simpledialog.askstring("Input", "Masukkan Nama:")
     nip = simpledialog.askstring("Input", "Masukkan NIP:")
@@ -113,9 +113,9 @@ waktu_label.grid(row=2, column=0, columnspan=2)
 kamera_label = Label(root)
 kamera_label.grid(row=3, column=0, padx=10, pady=10, sticky="nw")
 
-info_frame = tk.Frame(root, bd=2, relief=tk.SOLID, height=150, width=300)
+info_frame = tk.Frame(root, bd=2, relief=tk.SOLID, height=150, width=300)  
 info_frame.grid(row=3, column=1, padx=10, pady=10, sticky="nw")
-info_frame.grid_propagate(False)
+info_frame.grid_propagate(False)  
 
 nama_label = Label(info_frame, text="Nama: ", font=("Helvetica", 12), bg="lightgrey", anchor="w", width=29)
 nama_label.grid(row=0, column=0, sticky="w", padx=10, pady=5, ipadx=5, ipady=5)
@@ -175,20 +175,18 @@ def detect_head_shake(landmarks):
 
 frame = None
 ret = False
-processing_lock = threading.Lock()
 
 def video_stream():
     global frame, ret
     while True:
-        with processing_lock:
-            ret, frame = video_capture.read()
+        ret, frame = video_capture.read()
 
 def show_frame():
-    global register_wajah, frame, ret
+    global register_wajah
 
+    ret, frame = video_capture.read()
     if not ret:
-        root.after(10, show_frame)  # Continue loop even if no frame
-        return
+        return      
 
     gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
@@ -196,108 +194,123 @@ def show_frame():
 
     face_names = []
     face_statuses = []
-    
-    for face in detected_faces:
-        shape = predictor(gray_frame, face)
-        landmarks = [(shape.part(i).x, shape.part(i).y) for i in range(68)]
-        head_shake_detected = detect_head_shake(landmarks)
 
-        # Lakukan identifikasi hanya jika geleng kepala terdeteksi
-        if head_shake_detected:
+    if register_wajah:
+        for face in detected_faces:
+            shape = predictor(gray_frame, face)
+            landmarks = [(shape.part(i).x, shape.part(i).y) for i in range(68)]
+
             top, right, bottom, left = face.top(), face.right(), face.bottom(), face.left()
             encoding_wajah = face_recognition.face_encodings(frame, [(top, right, bottom, left)])[0]
 
-            if len(encodings_data_wajah) > 0:
-                face_distances = face_recognition.face_distance(encodings_data_wajah, encoding_wajah)
-                best_match_index = np.argmin(face_distances)
-                if face_distances[best_match_index] < 0.6:
-                    nip = list(info_data_wajah.keys())[best_match_index]
-                    name = info_data_wajah[nip]['nama']
-                    face_statuses.append("Dikenal")
-                else:
-                    name = "Tak Dikenal"
-                    face_statuses.append("Tak Dikenal")
-            else:
-                name = "Tak Dikenal"
-                face_statuses.append("Tak Dikenal")
-
-            face_names.append(name)
-
-            if name not in recorded_wajah:
-                recorded_wajah.add(name)
-
+            new_face_name, new_face_nim = prompt_user_input()
+            if new_face_name and new_face_nim:
+                nip, nama = register_wajah_baru(new_face_name, new_face_nim, encoding_wajah)
+                print(f"Registration successful for {new_face_name} - {new_face_nim}")
                 now = datetime.now()
                 current_time = now.strftime("%H:%M:%S")
                 current_day = now.strftime("%A")
                 current_date = now.strftime("%Y-%m-%d")
                 current_year = now.strftime("%Y")
-
-                if now <= deadline_presensi:
-                    status = "Tepat Waktu"
-                else:
-                    status = "Terlambat"
-
-                if name != "Tak Dikenal":
-                    csv_writer.writerow([nip, name, current_time, current_day, current_date, current_year, status])
-                    csv_file.flush()
-                    insert_attendance_to_firebase(nip, name, current_time, current_day, current_date, current_year, status)
-                    info_update_wajah(nip, name, status, True)
-                else:
-                    info_update_wajah("N/A", "Tak Dikenal", "Tak Dikenal", False)
-        else:
-            face_names.append("Tak Dikenal")
-            face_statuses.append("Tak Dikenal")
-            info_update_wajah("N/A", "Tak Dikenal", "Tak Dikenal", False)
-
-    if register_wajah and detected_faces:
-        face = detected_faces[0]
-        top, right, bottom, left = face.top(), face.right(), face.bottom(), face.left()
-        encoding_wajah = face_recognition.face_encodings(frame, [(top, right, bottom, left)])[0]
-
-        new_face_name, new_face_nim = prompt_user_input()
-        register_wajah_baru(new_face_name, new_face_nim, encoding_wajah)
-        info_update_wajah(new_face_nim, new_face_name, "Registered", True)
-
+                status = "Teregistrasi"
+                csv_writer.writerow([new_face_nim, new_face_name, current_time, current_day, current_date, current_year, status])
         register_wajah = False
+    else:
+        for face in detected_faces:
+            shape = predictor(gray_frame, face)
+            landmarks = [(shape.part(i).x, shape.part(i).y) for i in range(68)]
 
-    for (face, name, status) in zip(detected_faces, face_names, face_statuses):
-        top, right, bottom, left = face.top(), face.right(), face.bottom(), face.left()
+            full_name = "Tak Dikenal"
+            face_status = "Unrecognized"
+            found = False
 
-        if status == "Tak Dikenal":
-            color = (0, 0, 255)  # Red for unknown
-        else:
-            color = (0, 255, 0)  # Green for known
+            top, right, bottom, left = face.top(), face.right(), face.bottom(), face.left()
+            encoding_wajah = face_recognition.face_encodings(frame, [(top, right, bottom, left)])[0]
+
+            for nip, face_info in info_data_wajah.items():
+                stored_encoding = np.array(face_info['encoding_foto'])
+                face_distances = face_recognition.face_distance([stored_encoding], encoding_wajah)
+                if face_distances[0] < 0.4:
+                    full_name = face_info['nama']
+                    found = True
+                    break
+
+            # Only proceed to recognize if the person has nodded
+            if found and detect_head_shake(landmarks):  # Hanya catat jika sudah bergeleng
+                face_status = "Recognized and Nodded"  # Recognized and nodded
+                if full_name not in recorded_wajah:
+                    recorded_wajah.add(full_name)
+                    now = datetime.now()
+                    if now <= deadline_presensi:
+                        status = "Hadir"
+                    else:
+                        status = "Telat"
+                    info_update_wajah(nip, full_name, status)
+
+                    current_time = now.strftime("%H:%M:%S")
+                    current_day = now.strftime("%A")
+                    current_date = now.strftime("%Y-%m-%d")
+                    current_year = now.strftime("%Y")
+                    csv_writer.writerow([nip, full_name, current_time, current_day, current_date, current_year, status])
+                    insert_attendance_to_firebase(nip, full_name, current_time, current_day, current_date, current_year, status)
+            elif found:
+                face_status = "Recognized"  # Recognized but not nodded
+
+            face_names.append(full_name)
+            face_statuses.append(face_status)
+
+    for face, nama, face_status in zip(detected_faces, face_names, face_statuses):
+        left = face.left()
+        top = face.top()
+        right = face.right()
+        bottom = face.bottom()
+
+        if face_status == "Unrecognized":
+            color = (0, 0, 255)  # Red for unrecognized
+        elif face_status == "Recognized":
+            color = (0, 255, 255)  # Yellow for recognized but not nodded
+        elif face_status == "Recognized and Nodded":
+            color = (0, 255, 0)  # Green for recognized and nodded
 
         cv2.rectangle(frame, (left, top), (right, bottom), color, 2)
         cv2.rectangle(frame, (left, bottom - 35), (right, bottom), color, cv2.FILLED)
-        cv2.putText(frame, name, (left + 6, bottom - 6), cv2.FONT_HERSHEY_DUPLEX, 0.5, (255, 255, 255), 1)
 
-    # Convert the frame to an image that can be displayed
-    cv2image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGBA)
-    img = Image.fromarray(cv2image)
+        font_thickness = max((right - left) // 300, 1)
+        font = cv2.FONT_HERSHEY_DUPLEX
+        text_size = cv2.getTextSize(nama, font, 0.3, font_thickness)[0]
+
+        text_x = left + 6
+        text_y = bottom - 6
+
+        if text_x + text_size[0] > frame.shape[1]:
+            text_x = frame.shape[1] - text_size[0] - 5
+        if text_y - text_size[1] < 0:
+            text_y = text_size[1] + 5
+
+        cv2.putText(frame, nama, (left + 6, bottom - 6), font, 0.3, (255, 255, 255), font_thickness)
+
+    outline_color = (0, 0, 128)
+    frame_height, frame_width = frame.shape[:2]
+    outline_thickness = 5
+    cv2.rectangle(frame, (0, 0), (frame_width, frame_height), outline_color, outline_thickness)
+
+    img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
     imgtk = ImageTk.PhotoImage(image=img)
     kamera_label.imgtk = imgtk
-    kamera_label.configure(image=imgtk)
-    root.after(10, show_frame)
+    kamera_label.config(image=imgtk)
+    kamera_label.after(10, show_frame)
 
 def on_key_press(event):
     global register_wajah
-    if event.char == "r":
+    if event.char == 'r':
         register_wajah = True
 
-def on_closing():
-    root.quit()
-    video_capture.release()
-    csv_file.close()
-
-root.bind("<Key>", on_key_press)
+root.bind('<KeyPress>', on_key_press)  # Bind key press event
 
 update_date_time()
-
 video_thread = threading.Thread(target=video_stream)
-video_thread.daemon = True
 video_thread.start()
-
-root.protocol("WM_DELETE_WINDOW", on_closing)
 show_frame()
 root.mainloop()
+
+csv_file.close()
