@@ -10,7 +10,6 @@ from PIL import Image, ImageTk
 import firebase_admin
 from firebase_admin import credentials, db
 import dlib
-import threading
 
 # Initialize dlib's face detector (HOG-based) and create the facial landmark predictor
 detector = dlib.get_frontal_face_detector()
@@ -57,7 +56,6 @@ def load_data_wajah():
                 data_wajah[nip] = value
     return data_wajah
 
-
 def register_wajah_baru(nama, nip, encoding_wajah):
     info_data_wajah[nip] = {
         'nip': nip,
@@ -82,7 +80,7 @@ csv_file = open(csv_file_path, 'w', newline='')
 csv_writer = csv.writer(csv_file)
 csv_writer.writerow(["NIP", "Nama", "Waktu", "Hari", "Tanggal", "Tahun", "Status Kehadiran"])
 
-deadline_presensi = datetime.now().replace(hour=8, minute=0, second=0, microsecond=0)
+deadline_presensi = datetime.now().replace(hour=9, minute=0, second=0, microsecond=0)
 hari_berakhir = deadline_presensi + timedelta(days=1)
 
 register_wajah = False
@@ -149,7 +147,7 @@ def update_date_time():
     current_time = now.strftime("%H:%M:%S")
     current_date = now.strftime("%A, %Y-%m-%d")
     waktu_label.config(text=f"Waktu: {current_time}")
-    tanggal_label.config(text=f"Tanggal: {current_date}")
+    tanggal_label.config(text=f"Hari, Tanggal: {current_date}")
     root.after(1000, update_date_time)
 
 recorded_wajah = set()
@@ -172,14 +170,6 @@ def detect_head_shake(landmarks):
     head_shake_detected = abs(nose_mean_x - eye_center_x) > 5
 
     return head_shake_detected
-
-frame = None
-ret = False
-
-def video_stream():
-    global frame, ret
-    while True:
-        ret, frame = video_capture.read()
 
 def show_frame():
     global register_wajah
@@ -308,8 +298,6 @@ def on_key_press(event):
 root.bind('<KeyPress>', on_key_press)  # Bind key press event
 
 update_date_time()
-video_thread = threading.Thread(target=video_stream)
-video_thread.start()
 show_frame()
 root.mainloop()
 
